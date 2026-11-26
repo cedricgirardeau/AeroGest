@@ -54,33 +54,6 @@ Sélecteur d'aérodrome dynamique
 Composants réutilisables (tableaux, filtres, cartes)
 Design moderne et intuitif
 
-Structure du Projet
-
-aerogest/
-    prisma/
-        schema.prisma      # Schéma complet de la base de données
-        seed.ts            # Données initiales (250+ lignes)
-    src/
-        app/
-            api/           # 15+ routes API (aerodromes, aeronefs, clients, etc.)
-            auth/          # Page de connexion
-            dashboard/     # Tableau de bord
-            aeronefs/      # Gestion des aéronefs
-            vols/          # Gestion des vols
-            export/        # Module d'export
-            ... (14 pages au total)
-        components/        # 15+ composants React
-        lib/               # Authentification, utilitaires
-        types/             # Types TypeScript
-    .env.example           # Template des variables
-    Dockerfile             # Pour le déploiement
-    docker-compose.yml     # Avec PostgreSQL
-    package.json
-    next.config.ts
-    globals.css
-    README.md
-    INSTRUCTIONS.md        # Guide complet
-
 Comment Démarrer
 
 Ce script installe tout automatiquement : Node.js, PostgreSQL, dépendances npm, et 
