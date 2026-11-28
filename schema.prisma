@@ -1,0 +1,544 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// SCHEMA aer - RÉFÉRENTIEL GÉOGRAPHIQUE ET AÉRONEFS
+// ============================================================================
+
+model Pays {
+  code_pays   String    @id
+  libelle     String
+  prefixe_immat String?
+
+  // Relations
+  aerodromes Aerodrome[]
+  exploitants Exploitant[]
+  aeronefs    Aeronef[] @relation("AeronefPays")
+
+  @@map("aer.pays")
+}
+
+model Aerodrome {
+  code_oaci String   @id
+  libelle   String
+  code_pays String
+
+  // Relations
+  pays Pays @relation(fields: [code_pays], references: [code_pays])
+
+  // Dossiers de vol source
+  dossiers_vol DossierVol[] @relation("DossierSource")
+
+  // Escales
+  mouvements Mouvement[] @relation("MouvementEscale")
+
+  // Utilisateurs rattaches
+  utilisateurs Utilisateur[]
+
+  @@unique([code_oaci])
+  @@map("aer.aerodrome")
+}
+
+model CategoriePropulsion {
+  code     String   @id
+  libelle  String
+
+  // Relations
+  modeles_aeronefs ModeleAeronef[]
+
+  @@map("aer.categorie_propulsion")
+}
+
+model ModeleAeronef {
+  code_modele        String  @id
+  libelle_modele     String
+  categorie_propulsion String
+  is_helico          Boolean @default(false)
+  mtow_kg            Float?
+
+  // Relations
+  categorie CategoriePropulsion @relation(fields: [categorie_propulsion], references: [code])
+  aeronefs  Aeronef[]
+
+  @@map("aer.modele_aeronef")
+}
+
+model Aeronef {
+  id                     BigInt      @id @default(autoincrement())
+  immatriculation        String      @unique
+  code_pays_registre     String
+  code_modele            String?
+  exploitant_habituel_id BigInt?
+  client_id              BigInt?
+  mtow_kg_override       Float?
+  adresse_mode_s         String?     @unique
+  actif                  Boolean     @default(true)
+
+  // Relations
+  pays             Pays              @relation("AeronefPays", fields: [code_pays_registre], references: [code_pays])
+  modele           ModeleAeronef?    @relation(fields: [code_modele], references: [code_modele])
+  exploitant       Exploitant?       @relation("AeronefExploitant", fields: [exploitant_habituel_id], references: [id])
+  client           Client?           @relation(fields: [client_id], references: [id])
+
+  // Dossiers de vol
+  dossiers_vol DossierVol[]
+
+  // Mouvements
+  mouvements Mouvement[]
+
+  @@map("aer.aeronef")
+}
+
+// ============================================================================
+// SCHEMA aer - EXPLOITANTS & INDICATIFS
+// ============================================================================
+
+model TypeExploitant {
+  code    String   @id
+  libelle String
+
+  // Relations
+  exploitants Exploitant[]
+
+  @@map("aer.type_exploitant")
+}
+
+model Exploitant {
+  id                  BigInt    @id @default(autoincrement())
+  raison_sociale      String
+  code_pays           String
+  code_type_exploitant String
+  cta_detenu          Boolean   @default(false)
+  code_transporteur    String?   @unique
+
+  // Relations
+  pays           Pays            @relation(fields: [code_pays], references: [code_pays])
+  type           TypeExploitant @relation(fields: [code_type_exploitant], references: [code])
+
+  // Aéronefs
+  aeronefs Aeronef[] @relation("AeronefExploitant")
+
+  // Indicatifs OACI
+  indicatifs_oaci IndicatifOACI[]
+
+  // Dossiers de vol
+  dossiers_vol DossierVol[]
+
+  // Clients (pour facturation)
+  clients Client[]
+
+  @@map("aer.exploitant")
+}
+
+model IndicatifOACI {
+  code_oaci         String    @id
+  exploitant_id     BigInt
+  telephonie        String?
+  date_debut_validite DateTime @default(now())
+  date_fin_validite DateTime?
+
+  // Relations
+  exploitant Exploitant @relation(fields: [exploitant_id], references: [id])
+
+  // Dossiers de vol
+  dossiers_vol DossierVol[]
+
+  @@map("aer.indicatif_oaci")
+}
+
+// ============================================================================
+// SCHEMA aer - NOMENCLATURE DGAC
+// ============================================================================
+
+model TypeVoyageDGAC {
+  code    String   @id
+  libelle String
+
+  // Relations
+  dossiers_vol DossierVol[]
+
+  @@map("aer.type_voyage_dgac")
+}
+
+model TypeMouvement {
+  code    String   @id
+  libelle String
+
+  // Relations
+  mouvements Mouvement[]
+
+  @@map("aer.type_mouvement")
+}
+
+// ============================================================================
+// SCHEMA aer - DOSSIER DE VOL ET MOUVEMENTS
+// ============================================================================
+
+model DossierVol {
+  id                    BigInt    @id @default(autoincrement())
+  numero_dossier        String    @unique
+  date_vol              DateTime  @db.Date
+  code_aerodrome_source String
+  aeronef_id            BigInt
+  exploitant_id         BigInt?
+  indicatif_utilise     String?
+  code_indicatif_oaci   String?
+  qualification         String    @db.VarChar(20)
+  type_voyage_dgac      String
+  regime_vol            String    @db.VarChar(20)
+  case8_plan_vol        String?   @db.VarChar(1)
+  circonstance_vol      String?   @default("N") @db.VarChar(1)
+  vol_regulier          Boolean   @default(false)
+  nb_passagers          Int?      @default(0)
+  fret_kg               Float?    @default(0)
+  poste_kg              Float?    @default(0)
+  retard_minutes        Int?
+  code_cause_retard     String?
+  statut                String    @default("OUVERT") @db.VarChar(20)
+  cree_le               DateTime  @default(now())
+  modifie_le            DateTime  @default(now())
+  saisi_par             String?
+
+  // Relations
+  aerodrome_source Aerodrome           @relation("DossierSource", fields: [code_aerodrome_source], references: [code_oaci])
+  aeronef          Aeronef            @relation(fields: [aeronef_id], references: [id])
+  exploitant       Exploitant?        @relation(fields: [exploitant_id], references: [id])
+  indicatif_oaci   IndicatifOACI?     @relation(fields: [code_indicatif_oaci], references: [code_oaci])
+  type_voyage      TypeVoyageDGAC     @relation(fields: [type_voyage_dgac], references: [code])
+
+  // Mouvements
+  mouvements Mouvement[]
+
+  // Facturation
+  lignes_facture LigneFacture[] @relation("DossierLignes")
+
+  @@map("aer.dossier_vol")
+}
+
+model Mouvement {
+  id                  BigInt    @id @default(autoincrement())
+  dossier_id          BigInt
+  ordre_chrono         Int
+  code_type_mouvement String
+  code_aerodrome_escale String?
+  debut_ts            DateTime
+  fin_ts              DateTime
+  heure_bloc          DateTime? @db.Time
+  heure_piste         DateTime? @db.Time
+  piste_utilisee      String?
+  nb_touch_and_go     Int       @default(0)
+  nb_remises_gaz      Int       @default(0)
+  remarques           String?
+
+  // Relations
+  dossier       DossierVol          @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+  type_mouvement TypeMouvement      @relation(fields: [code_type_mouvement], references: [code])
+  aerodrome_escale Aerodrome?     @relation("MouvementEscale", fields: [code_aerodrome_escale], references: [code_oaci])
+
+  // Facturation
+  lignes_facture LigneFacture[] @relation("MouvementLignes")
+
+  @@unique([dossier_id, ordre_chrono])
+  @@map("aer.mouvement")
+}
+
+// ============================================================================
+// SCHEMA fac - FACTURATION
+// ============================================================================
+
+model Client {
+  id              BigInt    @id @default(autoincrement())
+  raison_sociale  String
+  code_pays       String?
+  adresse         String?
+  code_postal     String?
+  ville           String?
+  telephone       String?
+  email           String?
+  siren           String?   @unique
+  tva_intra       String?
+  exploitant_id   BigInt?
+  actif           Boolean   @default(true)
+
+  // Relations
+  pays       Pays?      @relation(fields: [code_pays], references: [code_pays])
+  exploitant Exploitant? @relation(fields: [exploitant_id], references: [id])
+
+  // Aéronefs
+  aeronefs Aeronef[]
+
+  // Factures
+  factures Facture[]
+
+  // Contrats
+  contrats Contrat[]
+
+  @@map("fac.client")
+}
+
+model PlanComptable {
+  id          BigInt    @id @default(autoincrement())
+  code        String    @unique
+  libelle     String
+  type        String    // ACTIF, PASSIF, CHARGE, PRODUIT
+  niveau      Int
+  code_parent String?
+
+  // Relations
+  parent      PlanComptable?  @relation("PlanComptableParent", fields: [code_parent], references: [code])
+  enfants     PlanComptable[] @relation("PlanComptableParent")
+
+  // Rubriques de facturation
+  rubriques RubriqueFacturation[]
+
+  @@map("fac.plan_comptable")
+}
+
+model RubriqueFacturation {
+  id              BigInt    @id @default(autoincrement())
+  code            String    @unique
+  libelle         String
+  description     String?
+  code_comptable  String
+  type_rubrique   String    // TAXE_ATTERRISSAGE, TAXE_PARKING, PRESTATION, AUTRE
+  tarif_base      Float     @default(0)
+  unite           String?   // MTOW, HEURE, FORFAIT, etc.
+  actif           Boolean   @default(true)
+
+  // Relations
+  compte PlanComptable @relation(fields: [code_comptable], references: [code])
+
+  // Prestations
+  prestations Prestation[]
+
+  // Lignes de facture
+  lignes_facture LigneFacture[]
+
+  @@map("fac.rubrique_facturation")
+}
+
+model Prestation {
+  id              BigInt    @id @default(autoincrement())
+  code            String    @unique
+  libelle         String
+  description     String?
+  rubrique_id     BigInt
+  tarif           Float
+  unite           String?
+  actif           Boolean   @default(true)
+
+  // Relations
+  rubrique RubriqueFacturation @relation(fields: [rubrique_id], references: [id])
+
+  // Lignes de facture
+  lignes_facture LigneFacture[]
+
+  @@map("fac.prestation")
+}
+
+model Contrat {
+  id              BigInt    @id @default(autoincrement())
+  numero_contrat  String    @unique
+  client_id       BigInt
+  date_debut      DateTime  @db.Date
+  date_fin        DateTime? @db.Date
+  libelle         String
+  description     String?
+  montant_ht      Float?
+  statut          String    @default("ACTIF")
+
+  // Relations
+  client Client @relation(fields: [client_id], references: [id])
+
+  // Factures
+  factures Facture[]
+
+  @@map("fac.contrat")
+}
+
+model Facture {
+  id              BigInt    @id @default(autoincrement())
+  numero_facture  String    @unique
+  client_id       BigInt
+  contrat_id      BigInt?
+  date_facture    DateTime  @default(now()) @db.Date
+  date_echeance   DateTime? @db.Date
+  statut          String    @default("BROUILLON") // BROUILLON, VALIDE, PAYEE, ANNULEE
+  montant_ht      Float     @default(0)
+  montant_tva     Float     @default(0)
+  montant_ttc     Float     @default(0)
+  tva_taux         Float     @default(20)
+  remarques       String?
+
+  // Relations
+  client  Client   @relation(fields: [client_id], references: [id])
+  contrat Contrat? @relation(fields: [contrat_id], references: [id])
+
+  // Lignes de facture
+  lignes_facture LigneFacture[]
+
+  // Règlements
+  reglements Reglement[]
+
+  // Écritures comptables
+  ecritures EcritureComptable[]
+
+  @@map("fac.facture")
+}
+
+model LigneFacture {
+  id              BigInt    @id @default(autoincrement())
+  facture_id      BigInt
+  dossier_id      BigInt?
+  mouvement_id    BigInt?
+  prestation_id   BigInt?
+  rubrique_id     BigInt
+  libelle         String
+  description     String?
+  quantite        Float     @default(1)
+  prix_unitaire   Float
+  montant_ht      Float
+  montant_tva     Float
+  montant_ttc     Float
+  tva_taux         Float     @default(20)
+
+  // Relations
+  facture    Facture         @relation(fields: [facture_id], references: [id], onDelete: Cascade)
+  dossier    DossierVol?     @relation("DossierLignes", fields: [dossier_id], references: [id])
+  mouvement  Mouvement?      @relation("MouvementLignes", fields: [mouvement_id], references: [id])
+  prestation Prestation?     @relation(fields: [prestation_id], references: [id])
+  rubrique   RubriqueFacturation @relation(fields: [rubrique_id], references: [id])
+
+  @@map("fac.ligne_facture")
+}
+
+model Reglement {
+  id              BigInt    @id @default(autoincrement())
+  facture_id      BigInt
+  date_reglement  DateTime  @default(now()) @db.Date
+  montant         Float
+  mode_reglement  String    // ESPÈCE, CHÈQUE, VIREMENT, CARTE, AUTRE
+  reference       String?   // numéro de chèque, référence virement
+  statut          String    @default("EN_ATTENTE") // EN_ATTENTE, VALIDE, ANNULE
+
+  // Relations
+  facture Facture @relation(fields: [facture_id], references: [id])
+
+  @@map("fac.reglement")
+}
+
+model EcritureComptable {
+  id              BigInt    @id @default(autoincrement())
+  facture_id      BigInt?
+  date_ecriture   DateTime  @default(now()) @db.Date
+  numero_piece    String?
+  libelle         String
+  montant_debit   Float
+  montant_credit  Float
+  code_compte      String
+
+  // Relations
+  facture Facture? @relation(fields: [facture_id], references: [id])
+
+  @@map("fac.ecriture_comptable")
+}
+
+// ============================================================================
+// SCHEMA sec - SÉCURITÉ
+// ============================================================================
+
+model Role {
+  id          BigInt    @id @default(autoincrement())
+  code        String    @unique
+  libelle     String
+  description String?
+
+  // Relations
+  utilisateurs Utilisateur[]
+
+  @@map("sec.role")
+}
+
+model Permission {
+  id          BigInt    @id @default(autoincrement())
+  code        String    @unique
+  libelle     String
+  description String?
+
+  // Relations
+  roles RolePermission[]
+
+  @@map("sec.permission")
+}
+
+model RolePermission {
+  role_id      BigInt
+  permission_id BigInt
+
+  // Relations
+  role       Role       @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, permission_id])
+  @@map("sec.role_permission")
+}
+
+model Utilisateur {
+  id              BigInt    @id @default(autoincrement())
+  email           String    @unique
+  nom             String?
+  prenom          String?
+  password_hash   String?
+
+  // Authentification externe
+  provider        String?   // local, microsoft
+  provider_id     String?   // ID externe (Office 365)
+
+  // Rattachement
+  aerodrome_id    String?   // Code OACI de l'aérodrome de rattachement
+  role_id         BigInt?
+
+  // Statut
+  actif           Boolean   @default(true)
+  date_creation   DateTime  @default(now())
+  date_modification DateTime @default(now())
+
+  // Relations
+  aerodrome Aerodrome? @relation(fields: [aerodrome_id], references: [code_oaci])
+  role     Role?       @relation(fields: [role_id], references: [id])
+
+  // Sessions
+  sessions Session[]
+
+  @@map("sec.utilisateur")
+}
+
+model Session {
+  id           String   @id
+  sessionToken String   @unique
+  userId       BigInt
+  expires      DateTime
+
+  // Relations
+  user Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sec.session")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("sec.verification_token")
+}
